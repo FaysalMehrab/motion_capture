@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Pose Detection</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #1a2a6c);
+            color: white;
+            min-height: 100vh;
+            padding: 20px;
+            overflow-x: hidden;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        header {
+            text-align: center;
+            padding: 20px 0;
+            margin-bottom: 30px;
+        }
+        
+        h1 {
+            font-size: 2.8rem;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            background: linear-gradient(to right, #ff7e5f, #feb47b);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            max-width: 700px;
+            margin: 0 auto;
+        }
+        
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+        
+        @media (max-width: 900px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+        }
+        
+        .card-title {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #4db8ff;
+        }
+        
+        .card-title i {
+            color: #4db8ff;
+        }
+        
+        .video-container {
+            position: relative;
+            width: 100%;
+            height: 0;
+            padding-bottom: 100%;
+            border-radius: 10px;
+            overflow: hidden;
+            background: #000;
+            margin-bottom: 15px;
+        }
+        
+        canvas, video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1); /* Mirror the video */
+        }
+        
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 50px;
+            background: linear-gradient(to right, #4a00e0, #8e2de2);
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        
+        .btn.secondary {
+            background: linear-gradient(to right, #11998e, #38ef7d);
+        }
+        
+        .btn.warning {
+            background: linear-gradient(to right, #f85032, #e73827);
+        }
+        
+        .model-selector {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        select {
+            padding: 12px 15px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            font-size: 1rem;
+        }
+        
+        option {
+            background: #2a2a5a;
+        }
+        
+        .slider-container {
+            margin: 15px 0;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            height: 8px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.2);
+            outline: none;
+            appearance: none;
+            -webkit-appearance: none;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #4db8ff;
+            cursor: pointer;
+        }
+        
+        .keypoints-panel {
+            margin-top: 20px;
+            height: 200px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 15px;
+            border-radius: 10px;
+            font-family: monospace;
+            font-size: 0.9rem;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 10px;
+        }
+        
+        .keypoint-card {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 10px;
+            border-radius: 6px;
+        }
+        
+        .keypoint-name {
+            font-weight: bold;
+            color: #4db8ff;
+            margin-bottom: 5px;
+        }
+        
+        .keypoint-value {
+            font-size: 0.8rem;
+        }
+        
+        .status-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ff4757;
+        }
+        
+        .status-indicator.active {
+            background: #2ed573;
+        }
+        
+        footer {
+            text-align: center;
+            padding: 30px 0;
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+        
+        .tech-logos {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-top: 15px;
+        }
+        
+        .tech-logos i {
+            font-size: 2.5rem;
+            color: #4db8ff;
+        }
+        
+        .performance {
+            background: rgba(0,0,0,0.3);
+            padding: 10px 15px;
+            border-radius: 20px;
+            margin-top: 10px;
+            font-size: 0.9rem;
+        }
+        
+        .instructions {
+            background: rgba(255,255,255,0.1);
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            font-size: 0.9rem;
+        }
+        
+        .instructions ul {
+            padding-left: 20px;
+            margin-top: 10px;
+        }
+        
+        .instructions li {
+            margin-bottom: 8px;
+        }
+        
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2.2rem;
+            }
+            
+            .dashboard {
+                gap: 15px;
+            }
+            
+            .card {
+                padding: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-running"></i> Real-Time Pose Detection</h1>
+            <p class="subtitle">Using TensorFlow.js and MoveNet to detect human poses in real-time from your webcam</p>
+        </header>
+        
+        <div class="dashboard">
+            <div class="card">
+                <h2 class="card-title"><i class="fas fa-video"></i> Webcam Feed</h2>
+                <div class="video-container">
+                    <canvas id="output-canvas" width="640" height="480"></canvas>
+                    <video id="webcam-video" width="640" height="480" autoplay playsinline style="display: none"></video>
+                </div>
+                
+                <div class="controls">
+                    <button id="start-btn" class="btn"><i class="fas fa-play"></i> Start Detection</button>
+                    <button id="stop-btn" class="btn warning"><i class="fas fa-stop"></i> Stop</button>
+                    <button id="model-btn" class="btn secondary"><i class="fas fa-cogs"></i> Change Model</button>
+                </div>
+                
+                <div class="instructions">
+                    <p><strong>Instructions:</strong></p>
+                    <ul>
+                        <li>Allow camera access when prompted</li>
+                        <li>Position yourself 1-2 meters from the camera</li>
+                        <li>Make sure you're well-lit for best results</li>
+                        <li>Try different poses to see detection in action</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2 class="card-title"><i class="fas fa-cogs"></i> Configuration</h2>
+                
+                <div class="model-selector">
+                    <label for="model-select">Detection Model:</label>
+                    <select id="model-select">
+                        <option value="MoveNetSinglePoseLightning">MoveNet SinglePose Lightning (Fastest)</option>
+                        <option value="MoveNetSinglePoseThunder">MoveNet SinglePose Thunder (More Accurate)</option>
+                    </select>
+                </div>
+                
+                <div class="slider-container">
+                    <label for="point-size">Point Size: <span id="point-size-value">8</span>px</label>
+                    <input type="range" id="point-size" min="2" max="15" value="8">
+                </div>
+                
+                <div class="slider-container">
+                    <label for="line-width">Line Width: <span id="line-width-value">6</span>px</label>
+                    <input type="range" id="line-width" min="1" max="10" value="6">
+                </div>
+                
+                <div class="slider-container">
+                    <label for="min-score">Minimum Confidence: <span id="min-score-value">0.35</span></label>
+                    <input type="range" id="min-score" min="0.1" max="1" step="0.05" value="0.35">
+                </div>
+                
+                <h3 class="card-title" style="font-size: 1.2rem; margin-top: 20px;"><i class="fas fa-code"></i> Detected Keypoints</h3>
+                <div class="keypoints-panel" id="keypoints-output">
+                    <p>Keypoints will appear here once detection starts...</p>
+                </div>
+                
+                <div class="status-bar">
+                    <div class="status-indicator" id="status-indicator"></div>
+                    <span id="status-text">Ready to start detection</span>
+                </div>
+                
+                <div class="performance">
+                    <div>Detection FPS: <span id="fps-counter">0</span></div>
+                    <div>Processing Time: <span id="processing-time">0</span>ms</div>
+                </div>
+            </div>
+        </div>
+        
+        <footer>
+            <p>Real-Time Pose Detection deployed on Render</p>
+        </footer>
+    </div>
+
+    <script>
+        // Main application state
+        const appState = {
+            isDetecting: false,
+            detector: null,
+            model: null,
+            pointSize: 8,
+            lineWidth: 6,
+            minScore: 0.35,
+            lastDetectionTime: 0,
+            fps: 0,
+            processingTime: 0,
+            keypoints: []
+        };
+        
+        // DOM Elements
+        const videoElement = document.getElementById('webcam-video');
+        const canvasElement = document.getElementById('output-canvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        const startBtn = document.getElementById('start-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        const modelBtn = document.getElementById('model-btn');
+        const modelSelect = document.getElementById('model-select');
+        const pointSizeSlider = document.getElementById('point-size');
+        const lineWidthSlider = document.getElementById('line-width');
+        const minScoreSlider = document.getElementById('min-score');
+        const keypointsOutput = document.getElementById('keypoints-output');
+        const statusIndicator = document.getElementById('status-indicator');
+        const statusText = document.getElementById('status-text');
+        const fpsCounter = document.getElementById('fps-counter');
+        const processingTimeEl = document.getElementById('processing-time');
+        const pointSizeValue = document.getElementById('point-size-value');
+        const lineWidthValue = document.getElementById('line-width-value');
+        const minScoreValue = document.getElementById('min-score-value');
+        
+        // Initialize the application
+        async function init() {
+            // Setup event listeners
+            setupEventListeners();
+            
+            // Update UI
+            pointSizeValue.textContent = appState.pointSize;
+            lineWidthValue.textContent = appState.lineWidth;
+            minScoreValue.textContent = appState.minScore;
+            
+            // Request camera access
+            await setupCamera();
+            
+            // Initialize model
+            await initModel();
+            
+            // Start with detection if camera is available
+            startDetection();
+        }
+        
+        // Set up event listeners
+        function setupEventListeners() {
+            startBtn.addEventListener('click', startDetection);
+            stopBtn.addEventListener('click', stopDetection);
+            modelBtn.addEventListener('click', changeModel);
+            
+            pointSizeSlider.addEventListener('input', () => {
+                appState.pointSize = parseInt(pointSizeSlider.value);
+                pointSizeValue.textContent = appState.pointSize;
+            });
+            
+            lineWidthSlider.addEventListener('input', () => {
+                appState.lineWidth = parseInt(lineWidthSlider.value);
+                lineWidthValue.textContent = appState.lineWidth;
+            });
+            
+            minScoreSlider.addEventListener('input', () => {
+                appState.minScore = parseFloat(minScoreSlider.value);
+                minScoreValue.textContent = appState.minScore;
+            });
+        }
+        
+        // Request camera access
+        async function setupCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        width: { ideal: 640 }, 
+                        height: { ideal: 480 },
+                        facingMode: "user" 
+                    }, 
+                    audio: false 
+                });
+                videoElement.srcObject = stream;
+                
+                return new Promise((resolve) => {
+                    videoElement.onloadedmetadata = () => {
+                        resolve();
+                    };
+                });
+            } catch (error) {
+                console.error('Error accessing camera:', error);
+                statusText.textContent = 'Camera access denied. Please allow camera permissions.';
+                statusIndicator.style.background = '#ff4757';
+                return Promise.reject(error);
+            }
+        }
+        
+        // Initialize the pose detection model
+        async function initModel() {
+            try {
+                statusText.textContent = 'Loading model...';
+                
+                // Set backend to WebGL for GPU acceleration
+                await tf.setBackend('webgl');
+                await tf.ready();
+                
+                // Get selected model
+                const modelName = modelSelect.value;
+                
+                // Create detector
+                appState.detector = await poseDetection.createDetector(
+                    poseDetection.SupportedModels.MoveNet,
+                    {
+                        modelType: modelName.includes('Lightning') ? 
+                            poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING : 
+                            poseDetection.movenet.modelType.SINGLEPOSE_THUNDER
+                    }
+                );
+                
+                statusText.textContent = 'Model loaded. Ready to detect!';
+                statusIndicator.style.background = '#2ed573';
+            } catch (error) {
+                console.error('Error loading model:', error);
+                statusText.textContent = 'Error loading model. See console for details.';
+                statusIndicator.style.background = '#ff4757';
+            }
+        }
+        
+        // Start pose detection
+        async function startDetection() {
+            if (!appState.detector) {
+                await initModel();
+            }
+            
+            if (!appState.isDetecting) {
+                appState.isDetecting = true;
+                statusText.textContent = 'Detecting poses...';
+                detectPoses();
+            }
+        }
+        
+        // Stop pose detection
+        function stopDetection() {
+            appState.isDetecting = false;
+            statusText.textContent = 'Detection stopped.';
+            statusIndicator.style.background = '#ff4757';
+            
+            // Clear canvas
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            keypointsOutput.innerHTML = '<p>Detection stopped</p>';
+        }
+        
+        // Change detection model
+        async function changeModel() {
+            if (appState.isDetecting) {
+                stopDetection();
+            }
+            
+            await initModel();
+            startDetection();
+        }
+        
+        // Main detection loop
+        async function detectPoses() {
+            if (!appState.isDetecting) return;
+            
+            const startTime = performance.now();
+            
+            try {
+                // Estimate poses
+                const poses = await appState.detector.estimatePoses(videoElement);
+                
+                // Calculate FPS
+                const now = performance.now();
+                appState.processingTime = now - startTime;
+                if (appState.lastDetectionTime) {
+                    appState.fps = Math.round(1000 / (now - appState.lastDetectionTime));
+                }
+                appState.lastDetectionTime = now;
+                
+                // Update performance display
+                fpsCounter.textContent = appState.fps;
+                processingTimeEl.textContent = appState.processingTime.toFixed(1);
+                
+                // Draw video frame to canvas
+                canvasCtx.save();
+                canvasCtx.scale(-1, 1); // Mirror the canvas
+                canvasCtx.translate(-canvasElement.width, 0);
+                canvasCtx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
+                canvasCtx.restore();
+                
+                // Process poses
+                if (poses && poses.length > 0) {
+                    const pose = poses[0];
+                    appState.keypoints = pose.keypoints;
+                    
+                    // Draw keypoints and skeleton
+                    drawKeypoints(pose.keypoints);
+                    drawSkeleton(pose.keypoints);
+                    
+                    // Update keypoints display
+                    updateKeypointsDisplay(pose.keypoints);
+                } else {
+                    keypointsOutput.innerHTML = '<p>No poses detected</p>';
+                }
+            } catch (error) {
+                console.error('Error detecting poses:', error);
+            }
+            
+            // Continue detection loop
+            requestAnimationFrame(detectPoses);
+        }
+        
+        // Draw keypoints on canvas
+        function drawKeypoints(keypoints) {
+            for (const keypoint of keypoints) {
+                if (keypoint.score >= appState.minScore) {
+                    // Flip x coordinate because canvas is mirrored
+                    const x = canvasElement.width - keypoint.x;
+                    const y = keypoint.y;
+                    
+                    // Draw keypoint
+                    canvasCtx.beginPath();
+                    canvasCtx.arc(x, y, appState.pointSize, 0, 2 * Math.PI);
+                    canvasCtx.fillStyle = '#ff4757';
+                    canvasCtx.fill();
+                    
+                    // Draw highlight
+                    canvasCtx.beginPath();
+                    canvasCtx.arc(x, y, appState.pointSize / 2, 0, 2 * Math.PI);
+                    canvasCtx.fillStyle = '#ffffff';
+                    canvasCtx.fill();
+                }
+            }
+        }
+        
+        // Draw skeleton on canvas
+        function drawSkeleton(keypoints) {
+            canvasCtx.lineWidth = appState.lineWidth;
+            canvasCtx.lineCap = 'round';
+            canvasCtx.strokeStyle = '#4db8ff';
+            
+            // Define connections between keypoints
+            const connections = [
+                // Face
+                ['left_ear', 'left_eye'], ['left_eye', 'nose'], 
+                ['nose', 'right_eye'], ['right_eye', 'right_ear'],
+                
+                // Torso
+                ['left_shoulder', 'right_shoulder'], 
+                ['left_shoulder', 'left_hip'], 
+                ['right_shoulder', 'right_hip'],
+                ['left_hip', 'right_hip'],
+                
+                // Left arm
+                ['left_shoulder', 'left_elbow'], 
+                ['left_elbow', 'left_wrist'],
+                
+                // Right arm
+                ['right_shoulder', 'right_elbow'], 
+                ['right_elbow', 'right_wrist'],
+                
+                // Left leg
+                ['left_hip', 'left_knee'], 
+                ['left_knee', 'left_ankle'],
+                
+                // Right leg
+                ['right_hip', 'right_knee'], 
+                ['right_knee', 'right_ankle'],
+            ];
+            
+            for (const [start, end] of connections) {
+                const startPoint = keypoints.find(kp => kp.name === start);
+                const endPoint = keypoints.find(kp => kp.name === end);
+                
+                if (startPoint && endPoint && 
+                    startPoint.score >= appState.minScore && 
+                    endPoint.score >= appState.minScore) {
+                    
+                    // Flip x coordinates because canvas is mirrored
+                    const startX = canvasElement.width - startPoint.x;
+                    const startY = startPoint.y;
+                    const endX = canvasElement.width - endPoint.x;
+                    const endY = endPoint.y;
+                    
+                    canvasCtx.beginPath();
+                    canvasCtx.moveTo(startX, startY);
+                    canvasCtx.lineTo(endX, endY);
+                    canvasCtx.stroke();
+                }
+            }
+        }
+        
+        // Update keypoints display
+        function updateKeypointsDisplay(keypoints) {
+            let html = '';
+            
+            for (const keypoint of keypoints) {
+                if (keypoint.score >= appState.minScore) {
+                    const scoreColor = keypoint.score > 0.75 ? '#2ed573' : 
+                                      keypoint.score > 0.5 ? '#ffa502' : '#ff4757';
+                    
+                    html += `
+                        <div class="keypoint-card">
+                            <div class="keypoint-name">${keypoint.name}</div>
+                            <div class="keypoint-value">x: ${keypoint.x.toFixed(1)}</div>
+                            <div class="keypoint-value">y: ${keypoint.y.toFixed(1)}</div>
+                            <div class="keypoint-value" style="color: ${scoreColor}">
+                                Score: ${keypoint.score.toFixed(2)}
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+            
+            keypointsOutput.innerHTML = html || '<p>No keypoints detected</p>';
+        }
+        
+        // Initialize when page loads
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>
